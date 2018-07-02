@@ -18,7 +18,7 @@ Building FogLAMP South ESP8266
 
 The FogLAMP south ESP8266 service is designed to be built using the Arduino IDE that has been cusotmised to support the ESP8266 board by use of the board mamager.
 
-In order to add support to the Arduino IDE open the preferences dialog and enter into the ``Addition Board Manager URLs`` field the URL
+In order to add support to the Arduino IDE open the preferences dialog and enter into the ``Additional Board Manager URLs`` field the URL
 
 - http://arduino.esp8266.com/stable/package_esp8266com_index.json
 
