@@ -25,7 +25,7 @@ In order to add support to the Arduino IDE open the preferences dialog and enter
 In the ``Tools`` - ``Board`` menu item select the ``Board Manager...`` option and look for the esp8266 boards and install these.
 
 Additional libraries are also required and can be installed via the ``Sketch`` - ``Include Libraries...`` option and the ``Library Manager...``. The libraries that will be reqired are:
-::
+
 - ArduinoJson
 - DHT sensor library for ESPx
 - esp8266_mdns
@@ -41,7 +41,7 @@ Configuring
 ===========
 
 Configuration is acheived via the WiFiManager. With a couple of simple steps:
-::
+
 - Turn on your ESP device
 - Use another device, phone, tablet or computer and look for a WiFi Network called ESPxxxxxx where xxxxxx is a string of digits. Connect to this WiFi network
 - Once connected a popup should appear, if it does not then browse to the web address 192.168.4.1
