@@ -45,7 +45,7 @@ Configuration is acheived via the WiFiManager. With a couple of simple steps:
 - Turn on your ESP device
 - Use another device, phone, tablet or computer and look for a WiFi Network called ESPxxxxxx where xxxxxx is a string of digits. Connect to this WiFi network
 - Once connected a popup should appear, if it does not then browse to the web address 192.168.4.1
-- You will be presented with a set of options, select either ``Configure WiFi`` or ``Configure WiFi (No Scan)``. Use the later if the WiFi you wish yor device to connect to is not browsable.
+- You will be presented with a set of options, select either ``Configure WiFi`` or ``Configure WiFi (No Scan)``. Use the later if the WiFi you wish your device to connect to is not browsable.
 - Either enter your SSID or select it form the list if you choose the scan option.
 - Enter the password for your WiFi network into the password field
 - The third field contains the name of the FogLAMP to which you wish to connect. Set this name to the name you assigned your FogLAMP or set it to * to connect to the first available FogLAMP core service.
