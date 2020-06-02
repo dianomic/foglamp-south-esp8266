@@ -1,44 +1,43 @@
-
 /*
- * FogLAMP embedded south microservice
- * 
- * This is an example south microservice designed to run on an ESP8266
- * processor using a DHT11/22 temperature and humidity sensor as an example
- * sensing device.
- * 
- * It connects to a FogLAMP core and storage microservice that is hosted
- * in a separate processor using the management API's defined within FogLAMP.
- * The core microservice is discovered using mDNS, the name of which can be
- * configured via the WiFi Manager that is built into this example.
- * 
- * The prototype was implemented using a WEMOS D1 mini processor board and
- * a WEMOS DHT22 shield for the sensor.
- * 
- * Copyright (c) 2018 Dianomic Systems
- *
- * Released under the Apache 2.0 Licence
- *
- * Author: Mark Riddoch
- */
+   FogLAMP embedded south microservice
+
+   This is an example south microservice designed to run on an ESP8266
+   processor using a DHT11/22 temperature and humidity sensor as an example
+   sensing device.
+
+   It connects to a FogLAMP core and storage microservice that is hosted
+   in a separate processor using the management API's defined within FogLAMP.
+   The core microservice is discovered using mDNS, the name of which can be
+   configured via the WiFi Manager that is built into this example.
+
+   The prototype was implemented using a WEMOS D1 mini processor board and
+   a WEMOS DHT22 shield for the sensor.
+
+   Copyright (c) 2018 Dianomic Systems
+
+   Released under the Apache 2.0 Licence
+
+   Author: Mark Riddoch
+*/
 
 #include <ESP8266WebServer.h>
 
 #include <ArduinoJson.h>
+
 #include <ESP8266mDNS.h>
 #include <FS.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266TrueRandom.h>
+//#include <ESP8266TrueRandom.h>
 #include <mdns.h>
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
 #include <WiFiManager.h>
-#include "DHT.h"
+#include "DHTesp.h"
 
-#define DHTPIN D4       // The digital pin to which the DHT22 is connected
-#define DHTTYPE DHT22   // there are multiple kinds of DHT sensors
+#define DHTPIN 2       // The digital pin to which the DHT22 is connected
+#define DHTTYPE DHTesp::DHT22   // there are multiple kinds of DHT sensors
 
-DHT dht(DHTPIN, DHTTYPE);
-
+DHTesp dht;
 const String host = "foglamp.local";
 const String service = "foglamp-manage";
 
@@ -48,11 +47,15 @@ short managementPort;
 
 char assetCode[40];
 
+#define DEBUG_DISCOVERY 0
+#define DEBUG_STATE 0
+#define DEBUG_MANAGEMENT 0
+
 /**
- * The states of the south service
- * 
- * Thw service is implemented as a simple state machine
- */
+   The states of the south service
+
+   Thw service is implemented as a simple state machine
+*/
 enum {
   WaitingForWiFi,
   WaitingForCoreAddress,
@@ -72,15 +75,16 @@ void saveConfigCallback () {
 }
 
 /*
- * Initial setup routine.
- * 
- * We store the parameters in a file in the NVRAM filesytem called config.json
- * These parameters give us the SSID and password of the WiFi to connect to,
- * the name of the foglamp server which will be our core server (or * for any)
- * and the asset code we will use to report our readings.
- */
+   Initial setup routine.
+
+   We store the parameters in a file in the NVRAM filesytem called config.json
+   These parameters give us the SSID and password of the WiFi to connect to,
+   the name of the foglamp server which will be our core server (or * for any)
+   and the asset code we will use to report our readings.
+*/
 void setup() {
   Serial.begin(115200);
+
   delay(10);
 
   if (SPIFFS.begin()) {
@@ -109,7 +113,7 @@ void setup() {
   } else {
     Serial.println("failed to mount FS");
   }
-  WiFiManagerParameter custom_foglamp_server("foglamp", "foglamp", coreName, 40);
+  WiFiManagerParameter custom_foglamp_server("foglamp", "*", coreName, 40);
   WiFiManagerParameter custom_asset_code("asset", "ESP_DHT22", assetCode, 40);
   // We start by connecting to a WiFi network
   WiFiManager wifiManager;
@@ -121,7 +125,7 @@ void setup() {
   wifiManager.addParameter(&custom_foglamp_server);
   wifiManager.addParameter(&custom_asset_code);
 
-  // wifiManager.resetSettings(); // Uncomment to invalid settings for test purposes/
+  //wifiManager.resetSettings(); // Uncomment to invalid settings for test purposes/
 
   wifiManager.autoConnect();
 
@@ -151,7 +155,12 @@ void setup() {
     Serial.println("Error setting up MDNS responder!");
   }
 
+#if DEBUG_STATE
+  Serial.println("Waiting for core address");
+#endif
   state = WaitingForCoreAddress;
+
+  dht.setup(DHTPIN, DHTTYPE);
 }
 
 // use mDNS to discover the FogLAMP core to which we want to connect
@@ -182,37 +191,41 @@ bool findManagementAPI()
 #endif
 
   for (int i = 0; i < n; ++i) {
-    if (strcmp(coreName, "*") == 0 || strcmp(coreName, MDNS.hostname(i).c_str()) == 0)
+    if (MDNS.port(i) == 0)
+    {
+      continue;
+    }
+    if (*coreName == 0 || strcmp(coreName, "*") == 0 || strcmp(coreName, MDNS.hostname(i).c_str()) == 0)
     {
       strcpy(hostAddress, MDNS.IP(i).toString().c_str());
       managementPort = MDNS.port(i);
+#if DEBUG_DISCOVERY
+      Serial.printf("Using mamnagement service %s:%d\r\n", hostAddress, managementPort);
+#endif
       return true;
     }
   }
+  Serial.printf("Failed to get management service matching '%s'.\r\n", coreName);
   return false;
 }
 
 /*
- * Called by the main loop routine to gather data from the sensor, in this
- * case a DHT11/22.
- */
+   Called by the main loop routine to gather data from the sensor, in this
+   case a DHT11/22.
+*/
 bool DHTLoop(String & payload)
 {
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  float h = dht.readHumidity();
+  float h = dht.getHumidity();
   // Read temperature as Celsius (the default)
-  float t = dht.readTemperature();
-  // Read temperature as Fahrenheit (isFahrenheit = true)
-  float f = dht.readTemperature(true);
+  float t = dht.getTemperature();
 
   // Check if any reads failed and exit early (to try again).
-  if (isnan(h) || isnan(t) || isnan(f)) {
+  if (isnan(h) || isnan(t)) {
     return false;
   }
 
-  // Compute heat index in Fahrenheit (the default)
-  float hif = dht.computeHeatIndex(f, h);
   // Compute heat index in Celsius (isFahreheit = false)
   float hic = dht.computeHeatIndex(t, h, false);
 
@@ -221,6 +234,7 @@ bool DHTLoop(String & payload)
             ", \"heat_index\" : " + hic + " }";
   return true;
 }
+
 
 // Generic HTTP Client class from which we derive other clients, e.g. Storage and Management
 class HTTPClient
@@ -340,6 +354,7 @@ class ManagementClient : public HTTPClient
       JsonArray& services = parsed["services"];
 
       storagePort = services[0]["service_port"];
+      Serial.printf("Storage port %d\r\n", storagePort);
       return true;
     };
 
@@ -384,6 +399,32 @@ class ManagementClient : public HTTPClient
       return storagePort;
     };
 
+    void AddTrack(const String& service, const String& asset)
+    {
+
+      StaticJsonBuffer<400> JSONBuffer;
+
+      JsonObject& root = JSONBuffer.createObject();
+      root["asset"] = asset.c_str();
+      root["plugin"] = service.c_str();
+      root["service"] = service.c_str();
+      root["event"] = "Ingest";
+
+      String payload;
+      root.printTo(payload);
+      if (!SendRequest(post, String("/foglamp/track"), payload))
+      {
+        Serial.println("Failed to track asset");
+        return;
+      }
+      delay(100);
+      String response;
+      while (connected && GetResponse(response) == false)
+        ;
+      Serial.print("Add asset tracking data: ");
+      Serial.println(response.c_str());
+    }
+
   private:
     const String  get = String("GET");
     const String  post = String("POST");
@@ -403,12 +444,10 @@ class StorageClient : public HTTPClient
     {
       byte uuidNumber[16]; // UUIDs in binary form are 16 bytes long
 
-      // Generate a new UUID
-      ESP8266TrueRandom.uuid(uuidNumber);
-      String uuidStr = ESP8266TrueRandom.uuidToString(uuidNumber);
+      //String uuidStr = ESP8266TrueRandom.uuidToString(uuidNumber);
 
       String fullPayload = String(" { \"readings\" : [ { \"asset_code\" : \"") +
-                           assetCode + "\", \"read_key\" : \"" + uuidStr +
+                           assetCode +
                            "\", \"reading\" : " + payload.c_str() + ", \"user_ts\" : \"now()\" } ] }";
       if (!SendRequest(post, String("/storage/reading"), fullPayload))
       {
@@ -521,6 +560,9 @@ void loop()
       {
         managementClient = new ManagementClient(hostAddress, managementPort);
         state = WaitingForStorage;
+#if DEBUG_STATE
+        Serial.println("Waiting for storage");
+#endif
       }
       break;
     case WaitingForStorage:
@@ -536,11 +578,15 @@ void loop()
         managementServer = new ManagementServer();
         managementClient->RegisterService(String("ESP8266-South"), String("Southbound"), managementServer->getPort());
         state = ConsumingReadings;
+#if DEBUG_STATE
+        Serial.println("Consuming readings");
+#endif
+        managementClient->AddTrack(String("ESP8266-South"), String(assetCode));
       }
       break;
     case ConsumingReadings:
       managementServer->loop();
-      if (millis() > lastReading + 2000)
+      if (millis() > lastReading + dht.getMinimumSamplingPeriod())
       {
         String reading;
         if (DHTLoop(reading))
